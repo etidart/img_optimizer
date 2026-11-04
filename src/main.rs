@@ -44,6 +44,9 @@ struct Args {
     /// Follow symbolic links when walking directories.
     #[arg(short = 'L', long = "dereference")]
     dereference: bool,
+    /// x265 CRF value (0 is lossless, higher values mean more compression).
+    #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..=51))]
+    crf: u8,
     /// Image files or directories to optimize. Directories are scanned recursively.
     inputs: Vec<PathBuf>,
 }
@@ -78,7 +81,7 @@ fn main() -> Result<()> {
         anyhow::bail!("no image files found");
     }
 
-    let result = optimize_images(&root, &inputs, &output_dir)?;
+    let result = optimize_images(&root, &inputs, &output_dir, args.crf)?;
 
     eprintln!(
         "optimized {} image(s): {} image data, {} metadata",

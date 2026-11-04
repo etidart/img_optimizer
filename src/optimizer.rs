@@ -243,7 +243,7 @@ fn collect_metadata_and_write(items: &[ImageData], output: &Path, root: &Path) -
     Ok(())
 }
 
-fn launch_ffmpeg(paths_with_data: Arc<Vec<ImageData>>, video_path: &Path) -> Result<thread::JoinHandle<Result<()>>> {
+fn launch_ffmpeg(paths_with_data: Arc<Vec<ImageData>>, video_path: &Path, crf: u8) -> Result<thread::JoinHandle<Result<()>>> {
     let mut max_w = 0u32;
     let mut max_h = 0u32;
     for data in &*paths_with_data {
@@ -257,7 +257,7 @@ fn launch_ffmpeg(paths_with_data: Arc<Vec<ImageData>>, video_path: &Path) -> Res
     let mut ffmpeg = Command::new("ffmpeg")
         .args([
             "-y", "-f", "image2pipe", "-vcodec", "png", "-i", "-",
-            "-c:v", "libx265", "-crf", "0",
+            "-c:v", "libx265", "-crf", &crf.to_string(),
             "-preset", "veryfast", "-pix_fmt", "yuv444p",
             "-color_range", "full", "-f", "matroska", "pipe:1"
         ])
@@ -302,7 +302,7 @@ fn launch_ffmpeg(paths_with_data: Arc<Vec<ImageData>>, video_path: &Path) -> Res
     Ok(handle)
 }
 
-pub fn optimize_images(root: &Path, image_files: &[PathBuf], output_dir: &Path) -> Result<OptimizerOutput> {
+pub fn optimize_images(root: &Path, image_files: &[PathBuf], output_dir: &Path, crf: u8) -> Result<OptimizerOutput> {
     if image_files.is_empty() {
         anyhow::bail!("no image files found");
     }
@@ -329,7 +329,7 @@ pub fn optimize_images(root: &Path, image_files: &[PathBuf], output_dir: &Path) 
         collect_metadata_and_write(&metadata_items, &metadata_path, &root_owned)
     });
 
-    let ffmpeg_handle = launch_ffmpeg(image_files, &video)?;
+    let ffmpeg_handle = launch_ffmpeg(image_files, &video, crf)?;
 
     metadata_handle
         .join()

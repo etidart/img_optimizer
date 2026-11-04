@@ -18,6 +18,12 @@ Optimize an explicit list of images:
 img_optimizer --root ./photos --output-dir ./optimized ./photos/a.jpg ./photos/b.png
 ```
 
+Choose a lossy x265 CRF value instead of the lossless default (`0`):
+
+```sh
+img_optimizer --root ./photos --output-dir ./optimized --crf 18 ./photos
+```
+
 Pass a list of files through a file or stdin:
 
 ```sh
@@ -31,4 +37,3 @@ The tool writes three files into the output directory:
 
 - `optimized.mkv`: the x265 video containing the optimized image sequence.
 - `metadata.csv`: metadata for each optimized image.
-- `optimized_files.txt`: the list of optimized image paths (relative to `--root`).
