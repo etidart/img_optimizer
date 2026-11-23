@@ -34,11 +34,13 @@ use image::{
 };
 use kdtree::{KdTree, distance::squared_euclidean};
 use rand::distr::{Alphanumeric, SampleString};
+use rayon::prelude::*;
 
 pub const OPTIMIZABLE_EXTS: [&str; 3] = ["jpeg", "jpg", "png"];
 
 const FEATURE_DIM: u32 = 32;
 const FEATURE_LEN: usize = (FEATURE_DIM * FEATURE_DIM) as usize;
+const METADATA_BATCH_SIZE: usize = 128;
 
 pub struct OptimizerOutput {
     pub video: PathBuf,
@@ -156,6 +158,77 @@ fn retrieve_exif_data(path: &Path) -> String {
     res
 }
 
+fn collect_metadata_row(data: &ImageData, root: &Path) -> Vec<String> {
+    let meta = fs::metadata(&data.path).ok();
+    let mode = meta
+        .as_ref()
+        .and_then(|m| {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                Some(m.permissions().mode())
+            }
+            #[cfg(not(unix))]
+            {
+                None
+            }
+        })
+        .map(|perm: u32| format!("{:o}", perm))
+        .unwrap_or_default();
+    let uid = meta
+        .as_ref()
+        .and_then(|m| {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                Some(m.uid())
+            }
+            #[cfg(not(unix))]
+            {
+                None
+            }
+        })
+        .map(|id: u32| id.to_string())
+        .unwrap_or_default();
+    let gid = meta
+        .as_ref()
+        .and_then(|m| {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::MetadataExt;
+                Some(m.gid())
+            }
+            #[cfg(not(unix))]
+            {
+                None
+            }
+        })
+        .map(|id: u32| id.to_string())
+        .unwrap_or_default();
+    let mtime = meta
+        .as_ref()
+        .and_then(|m| m.modified().ok())
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map(|d| d.as_secs().to_string())
+        .unwrap_or_default();
+    let exif_b64 = retrieve_exif_data(&data.path);
+
+    vec![
+        data.path
+            .strip_prefix(root)
+            .unwrap_or(&data.path)
+            .to_string_lossy()
+            .to_string(),
+        format!("{}x{}", data.res.0, data.res.1),
+        if data.rotate { "1" } else { "" }.to_string(),
+        mode,
+        uid,
+        gid,
+        mtime,
+        exif_b64,
+    ]
+}
+
 fn collect_metadata_and_write(items: &[ImageData], output: &Path, root: &Path) -> Result<()> {
     let file = File::create(output)
         .with_context(|| format!("failed to create {}", output.display()))?;
@@ -172,71 +245,15 @@ fn collect_metadata_and_write(items: &[ImageData], output: &Path, root: &Path) -
         "exif_metadata",
     ])?;
 
-    for data in items {
-        let meta = fs::metadata(&data.path).ok();
-        let mode = meta
-            .as_ref()
-            .and_then(|m| {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    Some(m.permissions().mode())
-                }
-                #[cfg(not(unix))]
-                {
-                    None
-                }
-            })
-            .map(|perm: u32| format!("{:o}", perm))
-            .unwrap_or_default();
-        let uid = meta
-            .as_ref()
-            .and_then(|m| {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::MetadataExt;
-                    Some(m.uid())
-                }
-                #[cfg(not(unix))]
-                {
-                    None
-                }
-            })
-            .map(|id: u32| id.to_string())
-            .unwrap_or_default();
-        let gid = meta
-            .as_ref()
-            .and_then(|m| {
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::MetadataExt;
-                    Some(m.gid())
-                }
-                #[cfg(not(unix))]
-                {
-                    None
-                }
-            })
-            .map(|id: u32| id.to_string())
-            .unwrap_or_default();
-        let mtime = meta
-            .as_ref()
-            .and_then(|m| m.modified().ok())
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs().to_string())
-            .unwrap_or_default();
-        let exif_b64 = retrieve_exif_data(&data.path);
+    for batch in items.chunks(METADATA_BATCH_SIZE) {
+        let rows = batch
+            .par_iter()
+            .map(|data| collect_metadata_row(data, root))
+            .collect::<Vec<_>>();
 
-        wrt.write_record(&[
-            data.path.strip_prefix(root).unwrap_or(&data.path).to_string_lossy().to_string(),
-            format!("{}x{}", data.res.0, data.res.1),
-            if data.rotate { "1" } else { "" }.to_string(),
-            mode,
-            uid,
-            gid,
-            mtime,
-            exif_b64,
-        ])?;
+        for row in rows {
+            wrt.write_record(row)?;
+        }
     }
 
     wrt.flush()?;
