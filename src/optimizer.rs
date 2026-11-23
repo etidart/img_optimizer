@@ -55,7 +55,9 @@ struct ImageData {
 }
 
 fn get_feature_vec_and_data(path: PathBuf) -> Result<(Vec<f64>, ImageData)> {
-    let img = image::open(&path).context("failed to open and read image")?.to_rgb8();
+    let img = image::open(&path)
+        .context("failed to open and read image")?
+        .to_rgb8();
     let rotate = img.width() < img.height();
     let img = if rotate { rotate90(&img) } else { img };
     let res = (img.width(), img.height());
@@ -109,9 +111,7 @@ fn retrieve_data_and_sort(paths: Vec<PathBuf>) -> Vec<ImageData> {
             }
         }
 
-        let next = next.unwrap_or_else(|| {
-            (0..n).find(|&i| !visited[i]).unwrap()
-        });
+        let next = next.unwrap_or_else(|| (0..n).find(|&i| !visited[i]).unwrap());
         visited[next] = true;
         sequence.push(next);
         current = next;
@@ -140,19 +140,19 @@ fn get_random_filepath() -> PathBuf {
 fn retrieve_exif_data(path: &Path) -> String {
     let tmp_path = get_random_filepath();
     let status = Command::new("exiftool")
-        .arg("-TagsFromFile").arg(path)
-        .arg("-all:all").arg(&tmp_path)
+        .arg("-TagsFromFile")
+        .arg(path)
+        .arg("-all:all")
+        .arg(&tmp_path)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
     let res = match status {
-        Ok(s) if s.success() => {
-            match fs::read(&tmp_path) {
-                Ok(data) => BASE64_STANDARD.encode(data),
-                _ => String::new()
-            }
-        }
-        _ => String::new()
+        Ok(s) if s.success() => match fs::read(&tmp_path) {
+            Ok(data) => BASE64_STANDARD.encode(data),
+            _ => String::new(),
+        },
+        _ => String::new(),
     };
     let _ = fs::remove_file(tmp_path);
     res
@@ -230,8 +230,8 @@ fn collect_metadata_row(data: &ImageData, root: &Path) -> Vec<String> {
 }
 
 fn collect_metadata_and_write(items: &[ImageData], output: &Path, root: &Path) -> Result<()> {
-    let file = File::create(output)
-        .with_context(|| format!("failed to create {}", output.display()))?;
+    let file =
+        File::create(output).with_context(|| format!("failed to create {}", output.display()))?;
     let mut wrt = csv::Writer::from_writer(file);
 
     wrt.write_record(&[
@@ -260,7 +260,11 @@ fn collect_metadata_and_write(items: &[ImageData], output: &Path, root: &Path) -
     Ok(())
 }
 
-fn launch_ffmpeg(paths_with_data: Arc<Vec<ImageData>>, video_path: &Path, crf: u8) -> Result<thread::JoinHandle<Result<()>>> {
+fn launch_ffmpeg(
+    paths_with_data: Arc<Vec<ImageData>>,
+    video_path: &Path,
+    crf: u8,
+) -> Result<thread::JoinHandle<Result<()>>> {
     let mut max_w = 0u32;
     let mut max_h = 0u32;
     for data in &*paths_with_data {
@@ -273,10 +277,26 @@ fn launch_ffmpeg(paths_with_data: Arc<Vec<ImageData>>, video_path: &Path, crf: u
 
     let mut ffmpeg = Command::new("ffmpeg")
         .args([
-            "-y", "-f", "image2pipe", "-vcodec", "png", "-i", "-",
-            "-c:v", "libx265", "-crf", &crf.to_string(),
-            "-preset", "veryfast", "-pix_fmt", "yuv444p",
-            "-color_range", "full", "-f", "matroska", "pipe:1"
+            "-y",
+            "-f",
+            "image2pipe",
+            "-vcodec",
+            "png",
+            "-i",
+            "-",
+            "-c:v",
+            "libx265",
+            "-crf",
+            &crf.to_string(),
+            "-preset",
+            "veryfast",
+            "-pix_fmt",
+            "yuv444p",
+            "-color_range",
+            "full",
+            "-f",
+            "matroska",
+            "pipe:1",
         ])
         .stdin(Stdio::piped())
         .stdout(Stdio::from(output))
@@ -319,7 +339,12 @@ fn launch_ffmpeg(paths_with_data: Arc<Vec<ImageData>>, video_path: &Path, crf: u
     Ok(handle)
 }
 
-pub fn optimize_images(root: &Path, image_files: &[PathBuf], output_dir: &Path, crf: u8) -> Result<OptimizerOutput> {
+pub fn optimize_images(
+    root: &Path,
+    image_files: &[PathBuf],
+    output_dir: &Path,
+    crf: u8,
+) -> Result<OptimizerOutput> {
     if image_files.is_empty() {
         anyhow::bail!("no image files found");
     }
@@ -355,5 +380,9 @@ pub fn optimize_images(root: &Path, image_files: &[PathBuf], output_dir: &Path, 
         .join()
         .map_err(|_| anyhow::anyhow!("ffmpeg thread panicked"))??;
 
-    Ok(OptimizerOutput { video, metadata, files })
+    Ok(OptimizerOutput {
+        video,
+        metadata,
+        files,
+    })
 }

@@ -152,8 +152,7 @@ fn read_paths_from(path: &Path, out: &mut Vec<PathBuf>) -> Result<()> {
         Box::new(io::stdin().lock())
     } else {
         Box::new(io::BufReader::new(
-            fs::File::open(path)
-                .with_context(|| format!("failed to open {}", path.display()))?,
+            fs::File::open(path).with_context(|| format!("failed to open {}", path.display()))?,
         ))
     };
 
