@@ -31,6 +31,12 @@ find ./photos -type f \( -iname '*.jpg' -o -iname '*.png' \) |
     img_optimizer --root ./photos --output-dir ./optimized --files-from -
 ```
 
+Restore the image files from an optimized archive:
+
+```sh
+img_optimizer unpack ./optimized/metadata.csv ./optimized/optimized.mkv --output-dir ./restored
+```
+
 ### Output
 
 The tool writes three files into the output directory:

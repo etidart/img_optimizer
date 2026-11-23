@@ -17,6 +17,7 @@
  */
 
 mod optimizer;
+mod unpacker;
 
 use std::{
     fs,
@@ -25,9 +26,9 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
-use crate::optimizer::{OPTIMIZABLE_EXTS, optimize_images};
+use optimizer::{OPTIMIZABLE_EXTS, optimize_images};
 
 #[derive(Debug, clap::Parser)]
 #[command(about = "Optimize images by similarity using the x265 codec", version)]
@@ -49,10 +50,42 @@ struct Args {
     crf: u8,
     /// Image files or directories to optimize. Directories are scanned recursively.
     inputs: Vec<PathBuf>,
+
+    #[command(subcommand)]
+    command: Option<Command>,
+}
+
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Restore images from an optimized MKV and metadata CSV.
+    Unpack {
+        /// Metadata CSV produced by img_optimizer.
+        csv: PathBuf,
+        /// Optimized Matroska/MKV video.
+        mkv: PathBuf,
+        /// Directory where restored image paths are written.
+        #[arg(short, long, default_value = ".")]
+        output_dir: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
+
+    if let Some(Command::Unpack {
+        csv,
+        mkv,
+        output_dir,
+    }) = args.command
+    {
+        let result = unpacker::unpack_images(&csv, &mkv, &output_dir)?;
+        eprintln!(
+            "restored {} image(s) into {}",
+            result.files.len(),
+            output_dir.display()
+        );
+        return Ok(());
+    }
 
     let root = args.root.canonicalize().unwrap_or(args.root);
     let output_dir = args.output_dir;
